@@ -18,6 +18,7 @@ import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import { useAuth } from '../App';
+import Alert from '@mui/material/Alert';
 
 import API from '../utils/api';
 
@@ -33,6 +34,7 @@ export default function Patients() {
   const [historyForm, setHistoryForm] = useState({ details: '', hospital: '' });
   const [loading, setLoading] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [insights, setInsights] = useState(null);
 
   const fetchPatients = async () => {
     setLoading(true);
@@ -57,6 +59,16 @@ export default function Patients() {
       const res = await API.get(`/patient-history/${patientId}`);
       console.log('Patient History Data:', res.data);
       setPatientHistory(res.data);
+      // Simple AI insights: keyword detection
+      try {
+        const text = res.data.map(r => r.details || '').join(' \n ');
+        const flags = [];
+        const risk = /(chest pain|ecg|lab|stroke|heart|fever|shortness of breath|covid|diabetes|hypertension)/i;
+        if (risk.test(text)) flags.push('Potential cardiovascular or acute symptoms detected. Consider follow-up.');
+        if (/vaccin/i.test(text)) flags.push('Vaccination record found.');
+        if (/self-reported/i.test(text)) flags.push('Contains self-reported entries. Cross-verify if needed.');
+        setInsights(flags);
+      } catch {}
     } catch (err) {
       console.error('Error fetching patient history:', err);
       setPatientHistory([]);
@@ -151,6 +163,13 @@ export default function Patients() {
           </Button>
         </Stack>
 
+        {insights && insights.length > 0 && (
+          <Stack mb={2}>
+            {insights.map((msg, idx) => (
+              <Alert key={idx} severity="info">{msg}</Alert>
+            ))}
+          </Stack>
+        )}
         <TableContainer component={Paper}>
           <Table aria-label="simple table">
             <TableHead>
