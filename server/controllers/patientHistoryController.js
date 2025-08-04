@@ -3,6 +3,8 @@ const Consent = require('../models/Consent');
 const Doctor = require('../models/Doctor');
 const User = require('../models/User');
 const Hospital = require('../models/Hospital');
+const Ledger = require('../models/Ledger');
+const ledgerController = require('./ledgerController');
 
 // Helper: Check if doctor has consent for patient (direct or via hospital)
 async function hasConsent(patientId, doctorId) {
@@ -66,6 +68,20 @@ exports.createPatientHistory = async (req, res) => {
         hospital,
         details,
       });
+      // Log to ledger
+      try {
+        const doctorUser = await User.findById(user._id);
+        const hospitalDoc = await Hospital.findById(hospital);
+        await ledgerController.createLedgerEntry({
+          body: {
+            type: 'Record Created',
+            entity: patient.toString(),
+            by: doctorUser?.username || 'doctor',
+            hospital: hospitalDoc?.name || 'Unknown',
+            details,
+          }
+        }, { status: () => ({ json: () => null }) });
+      } catch (e) {}
       return res.status(201).json(history);
     } else if (user.role === 'patient') {
       // Patient can add their own history (self-reported)
@@ -84,6 +100,19 @@ exports.createPatientHistory = async (req, res) => {
         hospital: hospitalId,
         details,
       });
+      // Log to ledger as self-report
+      try {
+        const hospitalDoc = await Hospital.findById(hospitalId);
+        await ledgerController.createLedgerEntry({
+          body: {
+            type: 'Self Report',
+            entity: user._id.toString(),
+            by: 'self',
+            hospital: hospitalDoc?.name || 'Unknown',
+            details,
+          }
+        }, { status: () => ({ json: () => null }) });
+      } catch (e) {}
       return res.status(201).json(history);
     } else {
       return res.status(401).json({ message: 'Only doctors or patients can create history' });

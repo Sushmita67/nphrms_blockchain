@@ -1,6 +1,7 @@
 const Consent = require('../models/Consent');
 const Doctor = require('../models/Doctor');
 const Ledger = require('../models/Ledger');
+const ledgerController = require('./ledgerController');
 
 // Get consents for a specific patient
 exports.getConsentsByPatient = async (req, res) => {
@@ -104,16 +105,15 @@ exports.createConsent = async (req, res) => {
     console.log('Created/Updated consent:', consent);
 
     // Add to ledger with proper details
-    const blockHash = Math.random().toString(16).slice(2, 10) + '...';
-    await Ledger.create({
-      type: `Consent ${action}`,
-      entity: patient,
-      by: doctorDoc.name,
-      hospital: doctorDoc.hospital?.name || '',
-      timestamp: new Date(),
-      block: blockHash,
-      details: `Patient ${patient} ${action.toLowerCase()}ed consent to Dr. ${doctorDoc.name} at ${doctorDoc.hospital?.name || 'Unknown Hospital'}`
-    });
+    await ledgerController.createLedgerEntry({
+      body: {
+        type: `Consent ${action}`,
+        entity: patient,
+        by: doctorDoc.name,
+        hospital: doctorDoc.hospital?.name || '',
+        details: `Patient ${patient} ${action.toLowerCase()}ed consent to Dr. ${doctorDoc.name} at ${doctorDoc.hospital?.name || 'Unknown Hospital'}`
+      }
+    }, { status: () => ({ json: () => null }) });
 
     res.status(200).json(consent);
   } catch (error) {
