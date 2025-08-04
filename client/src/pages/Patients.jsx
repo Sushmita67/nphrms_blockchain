@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { DataGrid } from '@mui/x-data-grid';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Paper from '@mui/material/Paper';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -23,7 +30,7 @@ export default function Patients() {
   const [historyDialog, setHistoryDialog] = useState(false);
   const [editPatient, setEditPatient] = useState(null);
   const [form, setForm] = useState({ name: '', age: '', gender: '', hospital: '' });
-  const [historyForm, setHistoryForm] = useState({ details: '' });
+  const [historyForm, setHistoryForm] = useState({ details: '', hospital: '' });
   const [loading, setLoading] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
 
@@ -83,7 +90,7 @@ export default function Patients() {
 
   const handleHistoryOpen = (patient) => {
     setSelectedPatient(patient);
-    setHistoryForm({ details: '' });
+    setHistoryForm({ details: '', hospital: '' });
     fetchPatientHistory(patient._id);
     setHistoryDialog(true);
   };
@@ -116,12 +123,16 @@ export default function Patients() {
   const handleAddHistory = async () => {
     try {
       const patientId = user?.role === 'patient' ? user._id : selectedPatient._id;
-      await API.post('/patient-history', {
+      const payload = {
         patient: patientId,
         details: historyForm.details,
-      });
+      };
+      if (historyForm.hospital) {
+        payload.hospital = historyForm.hospital;
+      }
+      await API.post('/patient-history', payload);
       fetchPatientHistory(patientId);
-      setHistoryForm({ details: '' });
+      setHistoryForm({ details: '', hospital: '' });
     } catch (err) {
       console.error('Error adding history:', err);
     }
@@ -129,57 +140,61 @@ export default function Patients() {
 
   // For patients - show their medical history
   if (user?.role === 'patient') {
-    const historyColumns = [
-      { field: 'date', headerName: 'Date', width: 150, valueGetter: (params) => {
-        if (!params || !params.row) return 'Unknown date';
-        const rawDate = params.row.date;
-        if (rawDate) {
-          const d = new Date(rawDate);
-          if (!isNaN(d.getTime())) {
-            const day = String(d.getDate()).padStart(2, '0');
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const year = d.getFullYear();
-            return `${day}-${month}-${year}`;
-          }
-        }
-        return 'Unknown date';
-      }},
-      { field: 'details', headerName: 'Medical Details', width: 300 },
-      { field: 'doctor', headerName: 'Doctor', width: 150, valueGetter: (params) => {
-        if (!params || !params.row) return 'Self-reported';
-        if (!params.row.doctor) return 'Self-reported';
-        // Handle populated doctor object
-        if (params.row.doctor.username) return params.row.doctor.username;
-        if (params.row.doctor.firstName || params.row.doctor.lastName) return `${params.row.doctor.firstName || ''} ${params.row.doctor.lastName || ''}`.trim();
-        if (params.row.doctor.name) return params.row.doctor.name;
-        return 'Self-reported';
-      }},
-      { field: 'hospital', headerName: 'Hospital', width: 200, valueGetter: (params) => {
-        if (!params || !params.row) return '';
-        if (params.row.hospital && params.row.hospital.name) return params.row.hospital.name;
-        return '';
-      }},
-    ];
+    // Render with a simple table to avoid any grid mapping issues
 
     return (
-      <div style={{ height: 420, width: '100%' }}>
+      <div style={{ width: '100%' }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
           <h2>My Medical Records</h2>
           <Button variant="contained" color="primary" onClick={() => setHistoryDialog(true)}>
             Add New Record
           </Button>
         </Stack>
-        
-        <DataGrid 
-          rows={patientHistory} 
-          columns={historyColumns} 
-          pageSize={5} 
-          rowsPerPageOptions={[5]} 
-          disableSelectionOnClick 
-          autoHeight 
-          loading={loading} 
-          getRowId={row => row._id} 
-        />
+
+        <TableContainer component={Paper}>
+          <Table aria-label="simple table">
+            <TableHead>
+              <TableRow>
+                <TableCell>Date</TableCell>
+                <TableCell>Medical Details</TableCell>
+                <TableCell>Doctor</TableCell>
+                <TableCell>Hospital</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {patientHistory.map((row) => {
+                const dateRaw = row.date || row.createdAt;
+                const d = dateRaw ? new Date(dateRaw) : null;
+                const dateStr = d && !isNaN(d.getTime()) ? d.toLocaleDateString() : 'Unknown date';
+                const patientId = row.patient?._id || row.patient;
+                const doctorId = row.doctor?._id || row.doctor;
+                const isSelf = patientId && doctorId && String(patientId) === String(doctorId);
+                let doctorStr = 'Self-reported';
+                if (!isSelf && row.doctor) {
+                  if (row.doctor.username) doctorStr = row.doctor.username;
+                  else if (row.doctor.firstName || row.doctor.lastName) doctorStr = `${row.doctor.firstName || ''} ${row.doctor.lastName || ''}`.trim();
+                  else if (row.doctor.name) doctorStr = row.doctor.name;
+                }
+                let hospitalStr = '';
+                const hosp = row.hospital;
+                if (hosp) hospitalStr = typeof hosp === 'string' ? (hospitals.find(h => h._id === hosp)?.name || '') : (hosp.name || '');
+                return (
+                  <TableRow key={row._id}>
+                    <TableCell>{dateStr}</TableCell>
+                    <TableCell>{row.details}</TableCell>
+                    <TableCell>{doctorStr}</TableCell>
+                    <TableCell>{hospitalStr}</TableCell>
+                  </TableRow>
+                );
+              })}
+              {patientHistory.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4}>No records found.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
 
         <Dialog open={historyDialog} onClose={handleHistoryClose} fullWidth maxWidth="sm">
           <DialogTitle>Add New Medical Record</DialogTitle>
@@ -195,6 +210,18 @@ export default function Patients() {
                 rows={4}
                 placeholder="Describe your symptoms, medications, or any health updates..."
               />
+              <TextField 
+                label="Hospital (optional)" 
+                name="hospital" 
+                value={historyForm.hospital} 
+                onChange={handleHistoryChange} 
+                fullWidth 
+                select 
+                SelectProps={{ native: true }}
+              >
+                <option value="">Select Hospital</option>
+                {hospitals.map(h => <option key={h._id} value={h._id}>{h.name}</option>)}
+              </TextField>
             </Stack>
           </DialogContent>
           <DialogActions>
@@ -278,25 +305,50 @@ export default function Patients() {
             )}
             
             <Typography variant="h6">Medical Records</Typography>
-            <DataGrid 
-              rows={patientHistory} 
-              columns={[
-                { field: 'date', headerName: 'Date', width: 120, valueGetter: (params) => {
-                  if (!params || !params.row) return 'Unknown date';
-                  return new Date(params.row.date).toLocaleDateString();
-                }},
-                { field: 'details', headerName: 'Details', width: 300 },
-                { field: 'doctor', headerName: 'Doctor', width: 150, valueGetter: (params) => {
-                  if (!params || !params.row) return 'Self-reported';
-                  return params.row.doctor.firstName + ' ' + params.row.doctor.lastName;
-                }},
-              ]} 
-              pageSize={5} 
-              rowsPerPageOptions={[5]} 
-              disableSelectionOnClick 
-              autoHeight 
-              getRowId={row => row._id} 
-            />
+            <TableContainer component={Paper}>
+              <Table aria-label="history table">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Date</TableCell>
+                    <TableCell>Details</TableCell>
+                    <TableCell>Doctor</TableCell>
+                    <TableCell>Hospital</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {patientHistory.map((row) => {
+                    const dateRaw = row.date || row.createdAt;
+                    const d = dateRaw ? new Date(dateRaw) : null;
+                    const dateStr = d && !isNaN(d.getTime()) ? d.toLocaleDateString() : 'Unknown date';
+                    const patientId = row.patient?._id || row.patient;
+                    const doctorId = row.doctor?._id || row.doctor;
+                    const isSelf = patientId && doctorId && String(patientId) === String(doctorId);
+                    let doctorStr = 'Self-reported';
+                    if (!isSelf && row.doctor) {
+                      if (row.doctor.username) doctorStr = row.doctor.username;
+                      else if (row.doctor.firstName || row.doctor.lastName) doctorStr = `${row.doctor.firstName || ''} ${row.doctor.lastName || ''}`.trim();
+                      else if (row.doctor.name) doctorStr = row.doctor.name;
+                    }
+                    let hospitalStr = '';
+                    const hosp = row.hospital;
+                    if (hosp) hospitalStr = typeof hosp === 'string' ? (hospitals.find(h => h._id === hosp)?.name || '') : (hosp.name || '');
+                    return (
+                      <TableRow key={row._id}>
+                        <TableCell>{dateStr}</TableCell>
+                        <TableCell>{row.details}</TableCell>
+                        <TableCell>{doctorStr}</TableCell>
+                        <TableCell>{hospitalStr}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {patientHistory.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4}>No records found.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
 
             {user?.role === 'doctor' && (
               <Stack spacing={2}>

@@ -282,9 +282,15 @@ export default function Dashboard() {
               <List>
                 {patientHistory.slice(0, 3).map(record => {
                   const date = record.date ? new Date(record.date).toLocaleDateString() : (record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Unknown date');
+                  // Determine doctor display
                   let doctorName = 'Self-reported';
-                  if (record.doctor && (record.doctor.firstName || record.doctor.lastName)) {
-                    doctorName = `${record.doctor.firstName || ''} ${record.doctor.lastName || ''}`.trim();
+                  const patientId = record.patient?._id || record.patient;
+                  const doctorId = record.doctor?._id || record.doctor;
+                  const isSelfReported = patientId && doctorId && String(patientId) === String(doctorId);
+                  if (!isSelfReported && record.doctor) {
+                    if (record.doctor.username) doctorName = record.doctor.username;
+                    else if (record.doctor.firstName || record.doctor.lastName) doctorName = `${record.doctor.firstName || ''} ${record.doctor.lastName || ''}`.trim();
+                    else if (record.doctor.name) doctorName = record.doctor.name;
                   }
                   let hospitalName = '';
                   if (record.hospital && (record.hospital.name)) {
